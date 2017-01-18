@@ -10,7 +10,8 @@ from pip.utils import get_installed_distributions
 from pip._vendor import pkg_resources
 from pip._vendor.packaging.utils import canonicalize_name
 from pip._vendor.pkg_resources import RequirementParseError
-
+from lxml import html
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,7 @@ def freeze(
         # requirements files, so we need to keep track of what has been emitted
         # so that we don't emit it again if it's seen again
         emitted_options = set()
+
         for req_file_path in requirement:
             with open(req_file_path) as req_file:
                 for line in req_file:
@@ -129,7 +131,19 @@ def freeze(
             '## The following requirements were added by '
             'pip freeze:'
         )
+
+    def get_description(name):
+        page = requests.get('http://pypi.python.org/pypi/' + str(name))
+        tree = html.fromstring(page.content)
+        description = tree.xpath('// *[ @ id = "content"] / div[3] / p[1] /text()')
+        return description
+
     for installation in sorted(
             installations.values(), key=lambda x: x.name.lower()):
         if canonicalize_name(installation.name) not in skip:
-            yield str(installation).rstrip()
+            description = get_description(installation.name)
+            if description is not None and len(description) != 0:
+                yield_str = str(installation).rstrip() + '\t# ' + description[0]
+            else:
+                yield_str = str(installation).rstrip()
+            yield yield_str
